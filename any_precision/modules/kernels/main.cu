@@ -64,12 +64,12 @@ torch::Tensor dequant_kbit(
 ) {
     assert(qweight.ndimension() == 3 && qweight.dtype() == torch::kInt && lut.dtype() == torch::kHalf);
     assert(qweight.device() == lut.device() && qweight.is_cuda());
-    assert(w_bits >= 3 && w_bits <= 8);
+    assert(w_bits >= 2 && w_bits <= 8);
     const int N = qweight.size(1);
     const int K = qweight.size(2) * 32;
 
     if (!dequant_initalized) {
-        get_dequant_func<3, 8>()(dequant_functions);
+        get_dequant_func<2, 8>()(dequant_functions);
         dequant_initalized = true;
     }
 
@@ -99,7 +99,7 @@ torch::Tensor matmul_kbit(
     const int M = in.numel() / K;
 
     // TODO assert with size or dtype
-    assert(M >= 1 && M <= 8 && w_bits >= 3 && w_bits <= 8);
+    assert(M >= 1 && M <= 8 && w_bits >= 2 && w_bits <= 8);
     assert(in.device() == qweight.device() && in.device() == lut.device() && in.is_cuda());
     assert(qweight.ndimension() == 3 && qweight.dtype() == torch::kInt && lut.dtype() == torch::kHalf);
     assert(in.dtype() == torch::kHalf);
@@ -111,7 +111,7 @@ torch::Tensor matmul_kbit(
         HANDLE_ERROR(cudaGetDeviceProperties(&prop, device));
         is_orin = strcmp(prop.name, "Orin") == 0;
 
-        get_matmul_func<3, 8>()(matmul_functions);
+        get_matmul_func<2, 8>()(matmul_functions);
         matmul_initialized = true;
     }
 

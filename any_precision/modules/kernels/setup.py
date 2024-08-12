@@ -1,6 +1,7 @@
 from setuptools import setup
 from torch.utils import cpp_extension
 
+
 setup(
     name="any_precision_ext",
     ext_modules=[
