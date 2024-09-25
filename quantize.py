@@ -26,6 +26,9 @@ if __name__ == "__main__":
                         help="Experimental: Group count per row - the default is 1")
     parser.add_argument("--dns", action="store_true",
                         help="REALLY Experimental: Whether to run Dense & Sparse quantization")
+    parser.add_argument("--sensitivity_outlier_percent", type=float, default=0.0, help="DNS sensitivity outlier percentage")
+    parser.add_argument("--threshold_outlier_percent", type=float, default=0.45, help="DNS threshold outlier percentage")
+    
 
     args = parser.parse_args()
 
