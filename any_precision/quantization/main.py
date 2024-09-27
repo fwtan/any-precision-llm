@@ -69,16 +69,16 @@ def any_precision_quantize(
     analyzer = get_analyzer(model, yaml_path=yaml_path, include_tokenizer=True)
 
     # ------------------- Set cache paths -------------------
-
     gradients_cache_path = (f"{cache_dir}/gradients/"
                             f"({model_name})-{dataset}_s{num_examples}_blk{seq_len}.pt")
 
+    dns_prefix = f"-dns-{threshold_outlier_percent}"
     quantized_cache_path = (f"{cache_dir}/quantized/"
-                          f"{'dns-' if dns else ''}({model_name})-w{parent_precision}_orig{seed_precision}"
+                          f"{model_name}{dns_prefix if dns else ''}-w{parent_precision}_orig{seed_precision}"
                           f"-gc{group_count}-{dataset}_s{num_examples}_blk{seq_len}")
 
     model_output_path = (f"{cache_dir}/packed/"
-                         f"anyprec-({model_name})-w{parent_precision}_orig{seed_precision}"
+                         f"anyprec-{model_name}{dns_prefix if dns else ''}-w{parent_precision}_orig{seed_precision}"
                          f"-gc{group_count}-{dataset}_s{num_examples}_blk{seq_len}")
 
     # ------------------- Gradients -------------------
