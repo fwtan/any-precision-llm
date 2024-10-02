@@ -21,7 +21,7 @@ __global__ void matmul_kbit_32(
 ) {
     static_assert(maxm >= 1 && bits >= 2 && bits <= 8);
     static_assert(!use_ksplit || maxm == 1);
-    constexpr bool use_half2_centroid = (bits == 3 || (bits == 4 && maxm > 1));
+    constexpr bool use_half2_centroid = (bits == 2 || bits == 3 || (bits == 4 && maxm > 1));
     constexpr int multi_row = (maxm == 1 ? 1 : 4);
 
     constexpr int num_centroids = 1 << bits, warp_size = 32;
@@ -41,12 +41,25 @@ __global__ void matmul_kbit_32(
             if constexpr (use_half2_centroid) {
                 const int xx = threadIdx.x % num_centroids, yy = threadIdx.x / num_centroids;
                 const __half fragCX = C[row_idx * num_centroids | xx];
-                #pragma unroll
-                for (int i = 0; i < shC_siz / warp_size / 2; i++) {
-                    const int yidx = yy | (i * warp_size / num_centroids);
-                    const __half fragCY = C[row_idx * num_centroids | yidx];
-                    ((__half2 * )shC)[centroid_idx | (yidx * num_centroids) | xx] = make_half2(fragCY, fragCX);
+                if (bits == 2) {
+                    if (yy < num_centroids) {
+                        const __half fragCY = C[row_idx * num_centroids | yy];
+                        ((__half2 * )shC)[centroid_idx | (yy * num_centroids) | xx] = make_half2(fragCY, fragCX);
+                    }
+                } else {
+                    #pragma unroll
+                    for (int i = 0; i < shC_siz / warp_size / 2; i++) {
+                        const int yidx = yy | (i * warp_size / num_centroids);
+                        const __half fragCY = C[row_idx * num_centroids | yidx];
+                        ((__half2 * )shC)[centroid_idx | (yidx * num_centroids) | xx] = make_half2(fragCY, fragCX);
+                    }
                 }
+                // #pragma unroll
+                // for (int i = 0; i < shC_siz / warp_size / 2; i++) {
+                //     const int yidx = yy | (i * warp_size / num_centroids);
+                //     const __half fragCY = C[row_idx * num_centroids | yidx];
+                //     ((__half2 * )shC)[centroid_idx | (yidx * num_centroids) | xx] = make_half2(fragCY, fragCX);
+                // }
             } else if constexpr (bits < 6) {
                 if (threadIdx.x < num_centroids)
                     shC[centroid_idx + threadIdx.x] = C[num_centroids * row_idx + threadIdx.x];

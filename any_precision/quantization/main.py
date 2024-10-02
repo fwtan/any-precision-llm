@@ -33,8 +33,8 @@ def any_precision_quantize(
         random_state=None,
         group_count=1,
         dns=False,
-        sensitivity_outlier_percent=0.05,
-        threshold_outlier_percent=0.40
+        sensitivity_outlier_percent=0.00,
+        threshold_outlier_percent=0.45
 ):
     assert mode in ['gradients', 'quantize', 'pack'], \
         "mode must be one of 'gradients', 'quantize', or 'pack'. Use 'pack' to run the entire pipeline."
@@ -69,16 +69,16 @@ def any_precision_quantize(
     analyzer = get_analyzer(model, yaml_path=yaml_path, include_tokenizer=True)
 
     # ------------------- Set cache paths -------------------
-
     gradients_cache_path = (f"{cache_dir}/gradients/"
                             f"({model_name})-{dataset}_s{num_examples}_blk{seq_len}.pt")
 
+    dns_prefix = f"-dns-{threshold_outlier_percent}"
     quantized_cache_path = (f"{cache_dir}/quantized/"
-                          f"{'dns-' if dns else ''}({model_name})-w{parent_precision}_orig{seed_precision}"
+                          f"{model_name}{dns_prefix if dns else ''}-w{parent_precision}_orig{seed_precision}"
                           f"-gc{group_count}-{dataset}_s{num_examples}_blk{seq_len}")
 
     model_output_path = (f"{cache_dir}/packed/"
-                         f"anyprec-({model_name})-w{parent_precision}_orig{seed_precision}"
+                         f"anyprec-{model_name}{dns_prefix if dns else ''}-w{parent_precision}_orig{seed_precision}"
                          f"-gc{group_count}-{dataset}_s{num_examples}_blk{seq_len}")
 
     # ------------------- Gradients -------------------
@@ -109,20 +109,22 @@ def any_precision_quantize(
     # ------------------- Dense & Sparse -------------------
 
     if dns:
-        logging.info("------------------- Dense & Sparse -------------------")
-        sparse_model_weights = remove_outliers(
-            analyzer=analyzer,
-            gradients=model_gradients,
-            sensitivity_outlier_percent=sensitivity_outlier_percent,
-            threshold_outlier_percent=threshold_outlier_percent,
-        )
-
         sparse_path = f"{quantized_cache_path}/sparse"
-        os.makedirs(sparse_path, exist_ok=True)
-        for l in range(analyzer.num_layers):
-            torch.save(sparse_model_weights[l], f"{sparse_path}/l{l}.pt")
+        if not os.path.exists(sparse_path) and not os.path.exists(f"{sparse_path}/l0.pt"):
+            logging.info("------------------- Dense & Sparse -------------------")
+            sparse_model_weights = remove_outliers(
+                analyzer=analyzer,
+                gradients=model_gradients,
+                sensitivity_outlier_percent=sensitivity_outlier_percent,
+                threshold_outlier_percent=threshold_outlier_percent,
+            )
+            os.makedirs(sparse_path, exist_ok=True)
+            for l in range(analyzer.num_layers):
+                torch.save(sparse_model_weights[l], f"{sparse_path}/l{l}.pt")
 
-        del sparse_model_weights
+            del sparse_model_weights
+        else:
+            logging.info(f"Sparse path {sparse_path} already exists and is not empty. Will skip dns.")
 
     # ------------------- Quantize: Seed + Upscale -------------------
 
