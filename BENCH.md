@@ -6,14 +6,14 @@ For now, only [MobileLLaMA-1.4B-Chat](https://huggingface.co/mtgv/MobileLLaMA-1.
 To benchmark the fp16 operations:
 
 ```
-CUDA_VISIBLE_DEVICES=0 python bench.py --model_path ${MODEL_PATH} --mode fp \
+CUDA_VISIBLE_DEVICES=0 python bench_linear.py --model_path ${MODEL_PATH} --mode fp \
   --layer [q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj]
 ```
 
 To benchmark the quantized operations:
 
 ```
-CUDA_VISIBLE_DEVICES=0 python bench.py --model_path ${MODEL_PATH} --mode quant \
+CUDA_VISIBLE_DEVICES=0 python bench_linear.py --model_path ${MODEL_PATH} --mode quant \
   --wbit [2|3|4] \
   --layer [q_proj|k_proj|v_proj|o_proj|gate_proj|up_proj|down_proj]
 ```
