@@ -49,12 +49,12 @@ def main(args):
             "output_attentions": False,
             "output_hidden_states": False,
             "return_dict": None,
-            "cache_position": cache_position,
+            # "cache_position": cache_position,
         }
     # else:
     #     inp = (inp, )
     
-    profile_graph(model, inp, args.output_dir)
+    profile_graph(model, inp, args.output_dir, num_iter=100)
 
         
 if __name__ == '__main__':
