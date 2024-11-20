@@ -1,8 +1,7 @@
-import torch
-from torch.profiler import profile, record_function, ProfilerActivity
-import os
-import torch.backends.cudnn as cudnn
+import os, torch
 from tqdm import trange
+import torch.backends.cudnn as cudnn
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 this_dir = os.path.abspath(os.path.dirname(__file__))
@@ -75,18 +74,15 @@ def profile_graph(model, inputs, export_path, device='cuda', num_iter=100, use_c
             static_output = model(*tuple([inputs["input_ids"], None, None, inputs["past_key_values"], None, None, True]))
         # model = torch.cuda.make_graphed_callables(model, tuple([inputs["input_ids"], inputs["attention_mask"], inputs["position_ids"], inputs["past_key_values"]]), num_warmup_iters=10, allow_unused_input=True)
 
-    real_inputs = [torch.randint_like(inputs["input_ids"], 0, 1000) for _ in range(num_iter)]
+    real_inputs = [torch.randint_like(inputs["input_ids"], 0, model.config.vocab_size-1) for _ in range(num_iter)]
 
     print('Profiling...')
-    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                 record_shapes=True, with_stack=True, profile_memory=True) as prof:
-        with record_function("model_inference"):
+    with profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True, with_stack=True, profile_memory=True) as prof:
+        # with record_function("model_inference"):
             for i in trange(num_iter):
                 if use_cuda_graph:
                     inputs["input_ids"].copy_(real_inputs[i])
                     g.replay()
-                    # print("out", torch.mean(static_output.logits).item(), torch.amax(static_output.logits).item(), torch.amin(static_output.logits).item())
-                    # print("out", len(static_output.logits.view(-1)), count_nan(static_output.logits))
                 else:
                     model(*tuple([real_inputs[i], None, None, inputs["past_key_values"], None, None, True]))
                 # inputs["input_ids"].copy_(real_inputs[i])
@@ -99,10 +95,10 @@ def profile_graph(model, inputs, export_path, device='cuda', num_iter=100, use_c
     profile_text_path = os.path.join(export_path, 'profile.txt')
     with open(profile_text_path, 'w') as f:
         print("CPU Time total:", file=f)
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=20),
+        print(prof.key_averages().table(sort_by="cpu_time_total"),
               file=f)
         print("CUDA Time total:", file=f)
-        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=20),
+        print(prof.key_averages().table(sort_by="cuda_time_total"),
               file=f)
         print("CPU Memory:", file=f)
         print(prof.key_averages().table(

@@ -46,7 +46,6 @@ def main(args):
     # context = model(torch.randint(0, tokenizer.vocab_size, size=(args.batch_size, args.context_length), dtype=torch.int32).cuda())
     # print((context.past_key_values[-1][0].shape, context.past_key_values[-1][1].shape))
 
-
     past_key_values = tuple([(
         torch.rand(args.batch_size, model.config.num_key_value_heads, args.context_length, model.config.hidden_size // model.config.num_attention_heads).to(torch.float16).cuda(),
         torch.rand(args.batch_size, model.config.num_key_value_heads, args.context_length, model.config.hidden_size // model.config.num_attention_heads).to(torch.float16).cuda()
@@ -57,7 +56,7 @@ def main(args):
         attention_mask = _make_causal_mask(1, args.context_length+1, args.context_length+1).cuda()
         past_seen_tokens = args.context_length
         cache_position = torch.arange(past_seen_tokens, past_seen_tokens + 1, device=input_ids.device)
-        position_ids = cache_position.unsqueeze(0)
+        position_ids = cache_position.unsqueeze(0).expand(args.batch_size, 1).contiguous()
         inp = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -72,10 +71,10 @@ def main(args):
             "return_dict": None,
             # "cache_position": cache_position,
         }
-    # else:
-    #     inp = (inp, )
+    else:
+        raise NotImplementedError
     
-    profile_graph(model, inp, args.output_dir, num_iter=100, use_cuda_graph=args.use_cuda_graph)
+    profile_graph(model, inp, args.output_dir, num_iter=args.num_iter, use_cuda_graph=args.use_cuda_graph)
 
         
 if __name__ == '__main__':
@@ -91,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--wbit', type=int, default=2, choices=[2,3,4])
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--context_length', type=int, default=1024)
-    parser.add_argument('--autoregressive', default=False, action="store_true")
+    parser.add_argument('--num_iter', type=int, default=100)
     parser.add_argument('--use_cuda_graph', default=False, action="store_true")
     parser.add_argument("--output_dir", default='results/bench', type=str)
     args = parser.parse_args()
