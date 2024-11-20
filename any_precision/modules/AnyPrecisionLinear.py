@@ -7,6 +7,11 @@ except:
     matmul_kbit, dequant_kbit = None, None
 
 
+def get_tensor_stream(tensor: torch.Tensor) -> torch.cuda.Stream:
+    stream = torch.cuda.current_stream(tensor.device)
+    return stream
+
+
 class AnyPrecisionLinear(nn.Module):
     def __init__(self, in_features, out_features, supported_bits, bias=True, precisions=None, include_sparse=False, numvals=0, device=None,
                  dtype=None):
@@ -67,6 +72,8 @@ class AnyPrecisionLinear(nn.Module):
             w_bits = self.precision
 
         dtype = x.dtype
+
+        # stream = get_tensor_stream(x)
         
         if x.numel() // x.shape[-1] > 8:
             weight = dequant_kbit(self.qweight, self._buffers[f'lut{w_bits}'], w_bits)
@@ -91,6 +98,7 @@ class AnyPrecisionLinear(nn.Module):
             raise RuntimeError(f"{self.precisions}-bit precisions are supported but {precision}-bit was specified.")
 
         self.precision = precision
+        # self.qweight = self.qweight[:precision]
 
     def extra_repr(self) -> str:
         return f'in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}'

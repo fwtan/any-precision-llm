@@ -13,6 +13,18 @@ from any_precision.evaluate.helpers import utils
 from any_precision.evaluate import eval as quant_eval
 
 
+def _make_causal_mask(q_len, kv_seq_len, valid_len):
+    assert (kv_seq_len >= valid_len) and (kv_seq_len >= q_len)
+    msk = torch.tril(torch.ones((1, 1, kv_seq_len, kv_seq_len)))
+    msk = msk[:, :, (-q_len):]
+    msk = msk.reshape((1, 1, q_len, kv_seq_len))
+    invalid_len = kv_seq_len - valid_len
+    if invalid_len > 0:
+        msk[:,:,:,:invalid_len] = 0
+    out = torch.zeros((1, 1, q_len, kv_seq_len), dtype=torch.float16).masked_fill(msk == 0, 1.0)
+    return out
+
+
 @torch.no_grad()
 def main(args):    
     if args.mode == "fp":
@@ -30,19 +42,28 @@ def main(args):
         model.set_precision(args.wbit)
         model = model.model
  
-    # create the cache
-    context = model(torch.randint(0, tokenizer.vocab_size, size=(args.batch_size, args.context_length), dtype=torch.int32).cuda())
+    # # create the cache
+    # context = model(torch.randint(0, tokenizer.vocab_size, size=(args.batch_size, args.context_length), dtype=torch.int32).cuda())
+    # print((context.past_key_values[-1][0].shape, context.past_key_values[-1][1].shape))
+
+
+    past_key_values = tuple([(
+        torch.rand(args.batch_size, model.config.num_key_value_heads, args.context_length, model.config.hidden_size // model.config.num_attention_heads).to(torch.float16).cuda(),
+        torch.rand(args.batch_size, model.config.num_key_value_heads, args.context_length, model.config.hidden_size // model.config.num_attention_heads).to(torch.float16).cuda()
+        ) for _ in range(len(model.model.layers))])
 
     if isinstance(model, (transformers.PreTrainedModel, )):
         input_ids = torch.randint(0, tokenizer.vocab_size, size=(args.batch_size, 1), dtype=torch.int32).cuda()
+        attention_mask = _make_causal_mask(1, args.context_length+1, args.context_length+1).cuda()
         past_seen_tokens = args.context_length
         cache_position = torch.arange(past_seen_tokens, past_seen_tokens + 1, device=input_ids.device)
         position_ids = cache_position.unsqueeze(0)
         inp = {
             "input_ids": input_ids,
-            "attention_mask": None,
+            "attention_mask": attention_mask,
             "position_ids": position_ids,
-            "past_key_values": context.past_key_values,
+            # "past_key_values": context.past_key_values,
+            "past_key_values": past_key_values,
             "inputs_embeds": None,
             "labels": None,
             "use_cache": True,
@@ -54,7 +75,7 @@ def main(args):
     # else:
     #     inp = (inp, )
     
-    profile_graph(model, inp, args.output_dir, num_iter=100)
+    profile_graph(model, inp, args.output_dir, num_iter=100, use_cuda_graph=args.use_cuda_graph)
 
         
 if __name__ == '__main__':
@@ -71,6 +92,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--context_length', type=int, default=1024)
     parser.add_argument('--autoregressive', default=False, action="store_true")
+    parser.add_argument('--use_cuda_graph', default=False, action="store_true")
     parser.add_argument("--output_dir", default='results/bench', type=str)
     args = parser.parse_args()
 
