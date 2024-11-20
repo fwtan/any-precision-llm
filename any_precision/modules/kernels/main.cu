@@ -1,6 +1,12 @@
 #include <assert.h>
 #include <torch/extension.h>
 #include "matmul.cuh"
+// #include <cuda.h>
+#include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAStream.h>
+#include <cuda_runtime_api.h>
+// typedef cudaStream_t cudaStream_t;
+
 
 void cudaError(cudaError_t errCode, const char * filename, int linenum) {
     if(errCode != cudaSuccess) {
@@ -76,8 +82,10 @@ torch::Tensor dequant_kbit(
     auto options = torch::TensorOptions().dtype(torch::kHalf).device(qweight.device());
     at::Tensor weight = torch::empty({N, K}, options);
 
+    at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream(qweight.get_device());
+
     dim3 grid(N/num_rows), block(32, num_rows);
-    dequant_functions[w_bits]<<<grid, block>>>(
+    dequant_functions[w_bits]<<<grid, block, 0, stream.stream()>>>(
         (uint32_t *)qweight.data_ptr<int>(),
         N, K,
         (__half *)lut.data_ptr<at::Half>(),
@@ -124,8 +132,10 @@ torch::Tensor matmul_kbit(
     const int use_ksplit = !is_orin && M == 1 && K > 4096 && w_bits >= 7;
     const int num_ksplit = (use_ksplit ? DIV_ROUND_UP(K, 4096) : 1);
 
+    at::cuda::CUDAStream stream = at::cuda::getCurrentCUDAStream(in.get_device());
+
     dim3 grid(N/(num_rows*multi_row)), block(32, num_rows, num_ksplit);
-    matmul_functions[w_bits][M][use_ksplit]<<<grid, block>>>(
+    matmul_functions[w_bits][M][use_ksplit]<<<grid, block, 0, stream.stream()>>>(
         (__half *)in.data_ptr<at::Half>(),
         (uint32_t *)qweight.data_ptr<int>(),
         M, N, K,
